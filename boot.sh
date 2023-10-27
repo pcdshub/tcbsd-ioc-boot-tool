@@ -8,6 +8,22 @@ _check_python() {
   )
 }
 
+_get_project_path() {
+  python3 - <<-EOF
+import pathlib
+import sys
+
+import lxml.etree
+
+with open("boot.tsproj", "rb") as f:
+    tree = lxml.etree.parse(f)
+
+tmc = tree.xpath("/TcSmProject/Project/Plc/Project")[0].attrib["TmcFilePath"]
+print(pathlib.PureWindowsPath(tmc), file=sys.stderr)
+print(pathlib.PureWindowsPath(tmc).parent)
+EOF
+}
+
 _check_python pytmc || exit 1
 _check_python ads_deploy || exit 1
 
@@ -26,8 +42,16 @@ rm -rf ${WORKDIR}
 set -xe
 mkdir -p ${WORKDIR}
 cd ${WORKDIR}
-unzip -p ${BOOT}/CurrentConfig.tszip '*.tsproj' > boot.tsproj
-unzip ${CURRENT_CONFIG}/*.tpzip
+unzip -p "${BOOT}/CurrentConfig.tszip" '*.tsproj' > boot.tsproj
+
+PROJECT_PATH=$(_get_project_path)
+
+if [ -z "$PROJECT_PATH" ]; then
+  echo "Failed to detect project path?"
+  exit 1
+fi
+
+unzip -d "${WORKDIR}/${PROJECT_PATH}" "${CURRENT_CONFIG}/"*.tpzip 
 
 python3 -m ads_deploy iocboot \
   --ioc-template-path ~/ads-ioc/iocBoot/templates \
